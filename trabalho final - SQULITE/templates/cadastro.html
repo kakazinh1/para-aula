@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block conteudo %}
+<div class="wrapper">
+    <div class="left">
+        <img src="{{ url_for('static', filename='img/logo-cadastro.png') }}" alt="Imagem de Fundo">
+    </div>
+
+    <div class="right">
+        <div class="login-box">
+            <h2>Cadastro</h2>
+            <div class="menu-direita-local">
+                <a href="/login">Login</a>
+            </div>
+            <form action="" method="post">
+                <label for="emailForm">E-mail</label>
+                <input type="email" name="emailForm" maxlength="50" id="emailForm" placeholder="seu@exemplo.com" required>
+                <label for="senhaForm">Senha</label>
+                <input type="password" name="senhaForm" maxlength="50" id="senhaForm" placeholder="••••••••" required>
+                <button type="submit">Cadastro</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

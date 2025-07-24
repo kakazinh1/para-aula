@@ -1,0 +1,33 @@
+{% extends "base_login.html" %}
+
+{% block conteudo %}
+<div class="container phrase-list-page">
+    <h1 class="page-title">Frases para "{{ kanji.character }}"</h1>
+    <p class="kanji-detail-info">Significado: {{ kanji.meaning }}</p>
+    <p class="kanji-detail-info">Onyomi: {{ kanji.onyomi or 'N/A' }} | Kunyomi: {{ kanji.kunyomi or 'N/A' }}</p>
+
+    <div class="action-buttons-top">
+        <a href="{{ url_for('add_phrase', kanji_id=kanji.id) }}" class="button primary-button">Adicionar Nova Frase</a>
+        <a href="{{ url_for('kanji_list') }}" class="button secondary-button">Voltar para Kanji</a>
+    </div>
+
+    {% if phrases %}
+    <div class="phrase-cards-container">
+        {% for phrase in phrases %}
+        <div class="phrase-card">
+            <p class="phrase-text">{{ phrase.text }}</p>
+            <div class="phrase-actions">
+                <a href="{{ url_for('edit_phrase', phrase_id=phrase.id) }}" class="button edit-button small-button">Editar</a>
+                <form action="{{ url_for('delete_phrase', phrase_id=phrase.id) }}" method="post" onsubmit="return confirm('Tem certeza que deseja deletar esta frase?');" class="delete-form">
+                    <button type="submit" class="button delete-button small-button">Deletar</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p class="no-items-message">Não há frases cadastradas para este Kanji ainda. <a href="{{ url_for('add_phrase', kanji_id=kanji.id) }}">Adicione uma frase!</a></p>
+    {% endif %}
+</div>
+{% endblock %}
+

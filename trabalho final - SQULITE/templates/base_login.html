@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dango - Aprenda Japonês</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <header>
+        <a href="/" id="logo">
+            <img src="{{ url_for('static', filename='img/dangu.png') }}" width="200" alt="Dango Logo">
+        </a>
+        <div class="menu-direita">
+            {% if session.get('user_id') %}
+            <a href="{{ url_for('kanji_list') }}">Meus Kanji</a>
+            <a href="{{ url_for('logout') }}">Logout</a>
+            {% else %}
+            <a href="{{ url_for('login') }}">Login</a>
+            <a href="{{ url_for('cadastro') }}">Cadastro</a>
+            {% endif %}
+        </div>
+    </header>
+    <main>
+        <div class="flash-messages-container">
+            {% with messages = get_flashed_messages(with_categories=True) %}
+            {% if messages %}
+            {% for category, message in messages %}
+            <div class="alert alert-{{ category }}">{{ message }}</div>
+            {% endfor %}
+            {% endif %}
+            {% endwith %}
+        </div>
+        {% block conteudo %}
+        {% endblock %}
+    </main>
+</body>
+</html>
+

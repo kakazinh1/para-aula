@@ -1,0 +1,18 @@
+{% extends "base_login.html" %}
+
+{% block conteudo %}
+<div class="container form-page">
+    <h1 class="page-title">{{ 'Editar Frase' if phrase else 'Adicionar Nova Frase' }} para "{{ kanji.character }}"</h1>
+    <form class="app-form" action="" method="post">
+        <div class="form-group">
+            <label for="text">Texto da Frase</label>
+            <textarea id="text" name="text" rows="4" required>{{ phrase.text if phrase else '' }}</textarea>
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="button primary-button">{{ 'Atualizar Frase' if phrase else 'Adicionar Frase' }}</button>
+            <a href="{{ url_for('phrase_list', kanji_id=kanji.id) }}" class="button secondary-button">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+

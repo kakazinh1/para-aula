@@ -1,0 +1,30 @@
+{% extends "base_login.html" %}
+
+{% block conteudo %}
+<div class="container form-page">
+    <h1 class="page-title">{{ 'Editar Kanji' if kanji else 'Adicionar Novo Kanji' }}</h1>
+    <form class="app-form" action="" method="post">
+        <div class="form-group">
+            <label for="character">Caractere Kanji</label>
+            <input type="text" id="character" name="character" value="{{ kanji.character if kanji else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="meaning">Significado</label>
+            <input type="text" id="meaning" name="meaning" value="{{ kanji.meaning if kanji else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="onyomi">Onyomi (Leitura Chinesa)</label>
+            <input type="text" id="onyomi" name="onyomi" value="{{ kanji.onyomi if kanji else '' }}">
+        </div>
+        <div class="form-group">
+            <label for="kunyomi">Kunyomi (Leitura Japonesa)</label>
+            <input type="text" id="kunyomi" name="kunyomi" value="{{ kanji.kunyomi if kanji else '' }}">
+        </div>
+        <div class="form-actions">
+            <button type="submit" class="button primary-button">{{ 'Atualizar Kanji' if kanji else 'Adicionar Kanji' }}</button>
+            <a href="{{ url_for('kanji_list') }}" class="button secondary-button">Cancelar</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
