@@ -23,6 +23,22 @@ migrate = Migrate(app, db)
 def index():
     return render_template('index.html')
 
+@app.route('/procastinar')
+def procastinar():
+    return render_template('procastinar.html')
+
+@app.route('/Calypso')
+def Calypso():
+    return render_template('Calypso.html')
+
+@app.route('/MEAJUDA.EXE')
+def MEAJUDAEXE():
+    return render_template('MEAJUDA.EXE.html')
+
+@app.route('/Monochrome Surviver')
+def MonochromeksSurviver():
+    return render_template('Monochrome Surviver.html')
+
 @app.route('/cadastro', methods=['GET', 'POST'])
 def registrar():
     if request.method == 'POST':

@@ -15,6 +15,7 @@
             {% if session.get('user_id') %}
             <a href="{{ url_for('kanji_list') }}">Meus Kanji</a>
             <a href="{{ url_for('logout') }}">Logout</a>
+            <a href="{{ url_for('procastinar') }}">Procrastinar</a>
             {% else %}
             <a href="{{ url_for('login') }}">Login</a>
             <a href="{{ url_for('cadastro') }}">Cadastro</a>

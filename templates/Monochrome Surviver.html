@@ -1,0 +1,1243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monochrome Survivor (Enhanced & Fixed)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Consolas', 'Courier New', monospace;
+            color: #fff;
+            position: relative; /* Needed for absolute positioning of overlay */
+        }
+        canvas {
+            background: #000000;
+            box-shadow: 0 0 30px rgba(170, 204, 255, 0.2);
+        }
+
+        /* Styles for the ranking overlay */
+        #ranking-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 500px; /* Adjust as needed */
+            max-height: 90vh; /* Allow scrolling if many players */
+            background: rgba(0, 0, 0, 0.95);
+            border: 2px solid #ff4444;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            z-index: 100; /* Above the canvas */
+            color: #fff;
+            font-family: 'Consolas', 'Courier New', monospace;
+            overflow-y: auto; /* Enable scrolling for ranking list */
+            box-shadow: 0 0 30px rgba(255, 0, 0, 0.3);
+        }
+
+        #ranking-overlay h2 {
+            color: #ff4444;
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+
+        #ranking-overlay p {
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        #ranking-overlay label {
+            display: block;
+            margin-top: 15px;
+            margin-bottom: 5px;
+            font-size: 16px;
+        }
+
+        #ranking-overlay input[type="text"] {
+            padding: 8px;
+            font-size: 16px;
+            width: 80%;
+            max-width: 250px;
+            background: #222;
+            border: 1px solid #555;
+            color: #fff;
+            margin-bottom: 10px;
+        }
+        #ranking-overlay input[type="text"]:focus {
+            outline: none;
+            border-color: #33ccff;
+            box-shadow: 0 0 5px #33ccff;
+        }
+
+        #ranking-overlay button {
+            background: #333333;
+            color: #ffff00;
+            font-size: 20px;
+            padding: 10px 20px;
+            border: 2px solid #ffff00;
+            cursor: pointer;
+            transition: background-color 0.2s, color 0.2s;
+            margin: 5px;
+            font-family: 'Consolas', 'Courier New', monospace;
+        }
+
+        #ranking-overlay button:hover {
+            background-color: #555555;
+            color: #fff;
+        }
+
+        #ranking-overlay #submission-message {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #2ecc71; /* Green for success */
+        }
+        #ranking-overlay #submission-message.error {
+            color: #ff0000; /* Red for error */
+        }
+
+        #ranking-overlay #top10-list {
+            width: 100%;
+            margin-top: 20px;
+            border-top: 1px dashed #555;
+            padding-top: 15px;
+        }
+
+        #ranking-overlay #top10-list h3 {
+            color: #33ccff;
+            font-size: 22px;
+            margin-bottom: 10px;
+        }
+
+        #ranking-overlay #top10-list ul {
+            list-style: none;
+            padding: 0;
+            max-height: 250px; /* Limit height for scroll */
+            overflow-y: auto;
+            border: 1px solid #33ccff55;
+            padding: 10px;
+            background-color: rgba(0,0,0,0.3);
+        }
+
+        #ranking-overlay #top10-list li {
+            font-size: 16px;
+            padding: 5px 0;
+            border-bottom: 1px dotted #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #ranking-overlay #top10-list li:last-child {
+            border-bottom: none;
+        }
+
+        #ranking-overlay #top10-list li span:first-child {
+            color: #fff; /* Player name */
+            font-weight: bold;
+        }
+
+        #ranking-overlay #top10-list li span:last-child {
+            color: #ffff00; /* Hours */
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <script>
+        // --- API CONFIGURATION ---
+        const BASE_API_URL = 'https://howdyhey.squareweb.app';
+        const API_ENDPOINTS = {
+            ADD_PLAYER: `${BASE_API_URL}/player`,
+            GET_TOP10: `${BASE_API_URL}/top10`,
+        };
+
+        // --- UPGRADE DEFINITIONS (RARITY AFFECTS APPEARANCE CHANCE) ---
+        const UPGRADES = [
+            // Common (White)
+            { id: 'catalyst', name: 'Catalyst', desc: 'Projectile Damage +2', rarity: 'common', color: '#ffffff', apply: (stats) => { stats.projectileDamage += 2; } },
+            { id: 'eyesight', name: 'Eyesight', desc: 'Critical Chance +5%', rarity: 'common', color: '#ffffff', apply: (stats) => { stats.critChance += 0.05; } },
+            { id: 'growth', name: 'Growth', desc: 'Max. HP +10', rarity: 'common', color: '#ffffff', apply: (stats) => { stats.maxHp += 10; stats.currentHp += 10; } },
+            { id: 'impulse', name: 'Impulse', desc: 'Jump Height +15%', rarity: 'common', color: '#ffffff', apply: (stats) => { stats.jumpPower *= 1.15; } },
+            { id: 'renew', name: 'Renew', desc: 'Heal to Max. HP', rarity: 'common', color: '#ffffff', apply: (stats) => { stats.currentHp = stats.maxHp; } },
+            { id: 'resist', name: 'Resist', desc: 'Defense +4%', rarity: 'common', color: '#ffffff', apply: (stats) => { stats.defense += 0.04; } },
+            { id: 'resonance', name: 'Resonance', desc: 'Atk Speed +12%', rarity: 'common', color: '#ffffff', apply: (stats) => { stats.fireRate *= 0.88; } },
+            { id: 'swift', name: 'Swift', desc: 'Movement Speed +20%', rarity: 'common', color: '#ffffff', apply: (stats) => { stats.speed *= 1.20; } },
+            // Uncommon (Green)
+            { id: 'growth_plus', name: 'Growth+', desc: 'Max. HP +20', rarity: 'uncommon', color: '#33ff77', apply: (stats) => { stats.maxHp += 20; stats.currentHp += 20; } },
+            { id: 'gush', name: 'Gush', desc: 'Adds +1 Jump', rarity: 'uncommon', color: '#33ff77', apply: (stats) => { stats.maxJumps += 1; } },
+            { id: 'leech', name: 'Leech', desc: 'Life Steal 3% of Damage', rarity: 'uncommon', color: '#33ff77', apply: (stats) => { stats.lifesteal += 0.03; } },
+            { id: 'orb', name: 'Orb', desc: 'Enemies have 5% chance to drop a healing orb', rarity: 'uncommon', color: '#33ff77', apply: (stats) => { stats.healOrbChance += 0.05; } },
+            { id: 'precision', name: 'Precision', desc: 'Critical hits deal +50% damage', rarity: 'uncommon', color: '#33ff77', apply: (stats) => { stats.critMultiplier += 0.5; } },
+            { id: 'resonance_plus', name: 'Resonance+', desc: 'Attack Speed +24%', rarity: 'uncommon', color: '#33ff77', apply: (stats) => { stats.fireRate *= 0.76; } },
+            { id: 'swift_plus', name: 'Swift+', desc: 'Movement Speed +40%', rarity: 'uncommon', color: '#33ff77', apply: (stats) => { stats.speed *= 1.40; } },
+            // Rare (Blue)
+            { id: 'appraisal', name: 'Appraisal', desc: '+1 upgrade choice on level up', rarity: 'rare', color: '#33ccff', apply: (stats) => { stats.upgradeChoices += 1; } },
+            { id: 'barrier', name: 'Barrier', desc: 'Blocks one hit every 15s', rarity: 'rare', color: '#33ccff', apply: (stats, scene) => { scene.enableBarrier(); } },
+            { id: 'growth_plusplus', name: 'Growth++', desc: 'Max. HP +40', rarity: 'rare', color: '#33ccff', apply: (stats) => { stats.maxHp += 40; stats.currentHp += 40; } },
+            { id: 'leech_plus', name: 'Leech+', desc: 'Life Steal 9% of Damage', rarity: 'rare', color: '#33ccff', apply: (stats) => { stats.lifesteal += 0.09; } },
+            { id: 'overheat', name: 'Overheat', desc: 'Your body deals 40 damage on contact', rarity: 'rare', color: '#33ccff', apply: (stats) => { stats.bodyDamage += 40; } },
+            { id: 'wound', name: 'Wound', desc: 'Attacks apply Bleed for 3s', rarity: 'rare', color: '#33ccff', apply: (stats) => { stats.canApplyWound = true; } },
+        ];
+        
+        // --- PLAYER STATS (Defined globally so game objects can easily access it) ---
+        class PlayerStats {
+            constructor() { this.reset(); }
+            reset() {
+                this.level = 1; this.exp = 0; this.expToNext = 100;
+                this.maxHp = 100; this.currentHp = 100; this.defense = 0;
+                this.speed = 350; this.jumpPower = 850; this.jumps = 0; this.maxJumps = 1;
+                this.projectileDamage = 10; this.fireRate = 400; this.critChance = 0.05;
+                this.critMultiplier = 1.5; this.lifesteal = 0; this.healOrbChance = 0;
+                this.bodyDamage = 0; this.canApplyWound = false; this.upgradeChoices = 3;
+                this.isInvulnerable = false; this.hasBarrier = false; this.barrierCooldown = 15000; this.lastBarrierTime = 0;
+                this.ownedUpgrades = {};
+            }
+        }
+        let playerStats;
+
+        // --- PROCEDURAL SOUND MANAGER ---
+        class SoundManager {
+            constructor() {
+                this.audioContext = null;
+                // Volume control for all sounds
+                this.masterGainNode = null;
+            }
+
+            // Initialize the AudioContext on a user gesture
+            init() {
+                if (!this.audioContext) {
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.masterGainNode = this.audioContext.createGain();
+                    this.masterGainNode.connect(this.audioContext.destination);
+                    this.masterGainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime); // Overall volume
+
+                    // Attempt to resume immediately if it's suspended (e.g., initial state)
+                    if (this.audioContext.state === 'suspended') {
+                        this.audioContext.resume().then(() => {
+                            console.log("AudioContext resumed successfully.");
+                        }).catch(e => {
+                            console.error("Failed to resume AudioContext:", e);
+                        });
+                    }
+                }
+            }
+
+            // Generic sound playing function with ADSR-like envelope
+            playSound(
+                frequency,
+                type = 'sine',
+                duration = 0.1, // total duration
+                attackTime = 0.01,
+                decayTime = 0.05,
+                sustainLevel = 0.5,
+                releaseTime = 0.05,
+                gain = 0.5,
+                modulateFreq = 0 // for vibrato/tremolo
+            ) {
+                if (!this.audioContext || this.audioContext.state !== 'running') {
+                    // Audio context is not ready or suspended
+                    return;
+                }
+
+                const osc = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                const now = this.audioContext.currentTime;
+
+                osc.connect(gainNode);
+                gainNode.connect(this.masterGainNode); // Connect to master gain
+
+                osc.type = type;
+                osc.frequency.setValueAtTime(frequency, now);
+
+                // Simple ADSR-like envelope
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(gain, now + attackTime);
+                gainNode.gain.linearRampToValueAtTime(gain * sustainLevel, now + attackTime + decayTime);
+                gainNode.gain.linearRampToValueAtTime(0, now + duration - releaseTime);
+
+                // Optional frequency modulation (for vibrato or more complex tones)
+                if (modulateFreq > 0) {
+                    const lfo = this.audioContext.createOscillator();
+                    const gainLfo = this.audioContext.createGain();
+                    lfo.type = 'sine';
+                    lfo.frequency.setValueAtTime(modulateFreq, now);
+                    gainLfo.gain.setValueAtTime(frequency * 0.1, now); // Modulate by 10% of frequency
+                    lfo.connect(gainLfo);
+                    gainLfo.connect(osc.frequency);
+                    lfo.start(now);
+                    lfo.stop(now + duration + 0.1); // Stop LFO slightly after main sound
+                }
+
+                osc.start(now);
+                osc.stop(now + duration);
+
+                osc.onended = () => {
+                    osc.disconnect();
+                    gainNode.disconnect();
+                    // LFO will be garbage collected as it's stopped
+                };
+            }
+
+            // Specific sound effect recipes
+
+            playShootSound() {
+                this.playSound(800, 'square', 0.08, 0.005, 0.02, 0.7, 0.05, 0.3);
+            }
+
+            playEnemyHitSound() {
+                this.playSound(300, 'triangle', 0.1, 0.01, 0.03, 0.5, 0.06, 0.4);
+            }
+
+            playPlayerDamageSound() {
+                this.playSound(100, 'sine', 0.2, 0.01, 0.05, 0.8, 0.1, 0.6);
+            }
+
+            playEnemySpawnSound() {
+                if (!this.audioContext || this.audioContext.state !== 'running') return;
+                const osc = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                const now = this.audioContext.currentTime;
+
+                osc.connect(gainNode);
+                gainNode.connect(this.masterGainNode);
+
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(60, now);
+                osc.frequency.linearRampToValueAtTime(120, now + 0.2);
+
+                gainNode.gain.setValueAtTime(0, now);
+                gainNode.gain.linearRampToValueAtTime(0.2, now + 0.05);
+                gainNode.gain.linearRampToValueAtTime(0, now + 0.5);
+
+                osc.start(now);
+                osc.stop(now + 0.5);
+                osc.onended = () => { osc.disconnect(); gainNode.disconnect(); };
+            }
+
+            playCollectOrbSound() {
+                if (!this.audioContext || this.audioContext.state !== 'running') return;
+                const now = this.audioContext.currentTime;
+                const initialFreq = 400;
+                const step = 50;
+                const durationPerTone = 0.05;
+
+                for (let i = 0; i < 3; i++) {
+                    const osc = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    osc.connect(gainNode);
+                    gainNode.connect(this.masterGainNode);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(initialFreq + i * step, now + i * durationPerTone);
+                    gainNode.gain.setValueAtTime(0, now + i * durationPerTone);
+                    gainNode.gain.linearRampToValueAtTime(0.3, now + i * durationPerTone + 0.01);
+                    gainNode.gain.linearRampToValueAtTime(0, now + i * durationPerTone + durationPerTone - 0.01);
+                    osc.start(now + i * durationPerTone);
+                    osc.stop(now + i * durationPerTone + durationPerTone);
+                    osc.onended = () => { osc.disconnect(); gainNode.disconnect(); };
+                }
+            }
+
+            playLevelUpSound() {
+                if (!this.audioContext || this.audioContext.state !== 'running') return;
+                const now = this.audioContext.currentTime;
+                const notes = [440, 554.37, 659.25, 880]; // A4, C#5, E5, A5
+                const durations = [0.15, 0.15, 0.15, 0.3];
+                let startTime = now;
+
+                notes.forEach((freq, i) => {
+                    const osc = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    osc.connect(gainNode);
+                    gainNode.connect(this.masterGainNode);
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, startTime);
+                    gainNode.gain.setValueAtTime(0, startTime);
+                    gainNode.gain.linearRampToValueAtTime(0.4, startTime + 0.02);
+                    gainNode.gain.linearRampToValueAtTime(0, startTime + durations[i] - 0.05);
+                    osc.start(startTime);
+                    osc.stop(startTime + durations[i]);
+                    osc.onended = () => { osc.disconnect(); gainNode.disconnect(); };
+                    startTime += durations[i] * 0.8; // Overlap slightly
+                });
+            }
+
+            playGameOverSound() {
+                if (!this.audioContext || this.audioContext.state !== 'running') return;
+                const osc = this.audioContext.createOscillator();
+                const gainNode = this.audioContext.createGain();
+                const now = this.audioContext.currentTime;
+
+                osc.connect(gainNode);
+                gainNode.connect(this.masterGainNode);
+
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.linearRampToValueAtTime(50, now + 1.0); // Descend over 1 second
+
+                gainNode.gain.setValueAtTime(0.5, now);
+                gainNode.gain.linearRampToValueAtTime(0, now + 1.0); // Fade out
+
+                osc.start(now);
+                osc.stop(now + 1.0);
+                osc.onended = () => { osc.disconnect(); gainNode.disconnect(); };
+            }
+
+            playUIClickSound() {
+                this.playSound(600, 'square', 0.05, 0.001, 0.01, 0.2, 0.03, 0.1);
+            }
+        }
+
+        // --- GLOBAL SOUND MANAGER INSTANCE ---
+        const soundManager = new SoundManager();
+
+        // --- MAIN MENU SCENE ---
+        class MainMenuScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'MainMenuScene' });
+            }
+
+            create() {
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                // Simple background
+                this.cameras.main.setBackgroundColor('#000000');
+                const g1 = this.make.graphics({x:0, y:0}, false);
+                for(let i=0; i<800; i++) g1.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.1, 0.4)).fillCircle(Phaser.Math.Between(0, width), Phaser.Math.Between(0, height), Phaser.Math.FloatBetween(0.2, 0.8));
+                g1.generateTexture('bg1tex_menu', width, height); g1.destroy();
+                this.add.image(0,0,'bg1tex_menu').setOrigin(0);
+
+                // Game Title
+                this.add.text(width / 2, height / 2 - 150, 'Monochrome Survivor', {
+                    fontSize: '64px', color: '#ffffff', fontFamily: 'Consolas, Courier New, monospace', stroke: '#cccccc', strokeThickness: 2
+                }).setOrigin(0.5);
+
+                // Start Button
+                const startButton = this.add.text(width / 2, height / 2, 'START', {
+                    fontSize: '40px', color: '#ffff00', fontFamily: 'Consolas, Courier New, monospace', backgroundColor: '#333333', padding: { x: 20, y: 10 }
+                }).setOrigin(0.5).setInteractive({ cursor: 'pointer' });
+
+                startButton.on('pointerover', () => startButton.setBackgroundColor('#555555'));
+                startButton.on('pointerout', () => startButton.setBackgroundColor('#333333'));
+                startButton.on('pointerdown', () => {
+                    soundManager.init(); // Initialize audio context on user click
+                    soundManager.playUIClickSound();
+                    this.cameras.main.fadeOut(500, 0, 0, 0);
+                    this.time.delayedCall(500, () => this.scene.start('GameScene'));
+                });
+
+                // --- Evident Credits ---
+                const creditY = height - 50;
+
+                const creditTextPart1 = 'Maked by Júlia Klee | Help my original ';
+                const creditTextPart2 = 'clicking here';
+                
+                // Use invisible text objects to calculate the width for centering
+                const text1Obj = this.add.text(0, 0, creditTextPart1, { fontSize: '24px' }).setVisible(false);
+                const text2Obj = this.add.text(0, 0, creditTextPart2, { fontSize: '24px' }).setVisible(false);
+                const totalCreditWidth = text1Obj.width + text2Obj.width;
+                const creditStartX = (width - totalCreditWidth) / 2;
+
+                // Create the visible, positioned text objects
+                this.add.text(creditStartX, creditY, creditTextPart1, { fontSize: '24px', color: '#ccc' }).setOrigin(0, 0.5);
+                const link = this.add.text(creditStartX + text1Obj.width, creditY, creditTextPart2, { fontSize: '24px', color: '#33ccff', fontStyle: 'bold' }).setOrigin(0, 0.5).setInteractive({useHandCursor: true});
+                
+                text1Obj.destroy();
+                text2Obj.destroy();
+
+                link.on('pointerover', () => link.setStyle({ fill: '#66e0ff' }));
+                link.on('pointerout', () => link.setStyle({ fill: '#33ccff' }));
+                link.on('pointerdown', () => {
+                    soundManager.init(); // Also init if this is the first interaction
+                    soundManager.playUIClickSound();
+                    window.open('https://kleekuree.itch.io/hell-breakout', '_blank');
+                });
+                
+                this.add.text(width / 2, creditY + 30, 'Credit for original: kleekuree.itch.io/hell-breakout', {
+                    fontSize: '16px', color: '#888', fontStyle: 'italic'
+                }).setOrigin(0.5);
+            }
+        }
+
+        // --- MAIN GAME SCENE ---
+        class GameScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'GameScene' });
+                this.rankingOverlay = null; // Reference to the HTML overlay
+            }
+
+            // --- SCENE LIFECYCLE ---
+            preload() {}
+
+            create() {
+                this.gameIsOver = false;
+                this.gameIsPaused = false;
+                playerStats = new PlayerStats();
+                this.gameTime = 0;
+                this.nextEnemySpawn = 0;
+                this.lastFired = 0;
+                this.isMouseDown = false;
+                
+                this.soundManager = soundManager; // Make soundManager accessible to the scene and its children
+
+                this.createBackground();
+                this.createWorld();
+                
+                this.player = this.physics.add.sprite(config.width / 2, config.height - 150, null);
+                this.player.setBodySize(24, 48).setCollideWorldBounds(true).setBounce(0.1);
+                this.player.body.setDragX(1200);
+                this.player.graphics = this.add.graphics().setDepth(1);
+                this.player.scarf = [{x: this.player.x, y: this.player.y + 20}, {x: this.player.x, y: this.player.y + 20}, {x: this.player.x, y: this.player.y + 20}, {x: this.player.x, y: this.player.y + 20}];
+
+                this.playerBullets = this.physics.add.group({ classType: PlayerBullet, runChildUpdate: true, maxSize: 50 });
+                this.enemyBullets = this.physics.add.group({ classType: EnemyBullet, runChildUpdate: true, maxSize: 100 });
+                this.enemies = this.physics.add.group({ classType: Enemy, runChildUpdate: true });
+                this.orbs = this.physics.add.group({ classType: HealingOrb, runChildUpdate: true, maxSize: 5 }); 
+                this.particles = this.physics.add.group({ classType: Particle, runChildUpdate: true, maxSize: 200 });
+                
+                this.keys = this.input.keyboard.addKeys('W,A,D,SPACE');
+                this.mouse = this.input.activePointer;
+                this.input.on('pointerdown', () => this.isMouseDown = true);
+                this.input.on('pointerup', () => this.isMouseDown = false);
+                this.physics.add.collider(this.player, this.platforms);
+                this.physics.add.overlap(this.playerBullets, this.enemies, this.hitEnemy, null, this);
+                this.physics.add.overlap(this.player, this.enemyBullets, this.hitPlayer, null, this);
+                this.physics.add.overlap(this.player, this.enemies, this.touchEnemy, null, this);
+                this.physics.add.overlap(this.player, this.orbs, this.collectOrb, null, this);
+                this.physics.add.collider([this.playerBullets, this.enemyBullets, this.orbs], this.platforms, (obj) => obj.kill ? obj.kill() : obj.destroy());
+                
+                this.createUI();
+                this.time.addEvent({ delay: 1000, callback: () => this.gameTime++, loop: true });
+                this.cameras.main.fadeIn(500, 0, 0, 0);
+
+                // Ensure any leftover overlay is removed from previous game if it wasn't cleaned
+                this.removeRankingOverlay();
+            }
+            
+            update(time, delta) {
+                if (this.gameIsOver || this.gameIsPaused) return;
+
+                this.updateBackground();
+                this.handlePlayerMovement();
+                this.handlePlayerShooting(time);
+                this.handleEnemySpawning(time);
+                this.updateBarrier(time);
+                this.drawPlayer(time);
+                this.updateUI(time);
+            }
+
+            // --- VISUAL & WORLD CREATION ---
+            createBackground() {
+                this.bg1 = this.add.tileSprite(0, 0, config.width, config.height, null).setOrigin(0,0).setScrollFactor(0);
+                this.bg2 = this.add.tileSprite(0, 0, config.width, config.height, null).setOrigin(0,0).setScrollFactor(0);
+                this.bg3 = this.add.tileSprite(0, 0, config.width, config.height, null).setOrigin(0,0).setScrollFactor(0);
+                const g1 = this.make.graphics({x:0, y:0}, false);
+                for(let i=0; i<800; i++) g1.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.1, 0.4)).fillCircle(Phaser.Math.Between(0, config.width), Phaser.Math.Between(0, config.height), Phaser.Math.FloatBetween(0.2, 0.8));
+                g1.generateTexture('bg1tex', config.width, config.height); g1.destroy(); this.bg1.setTexture('bg1tex');
+                const g2 = this.make.graphics({x:0, y:0}, false);
+                for(let i=0; i<300; i++) g2.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.3, 0.6)).fillCircle(Phaser.Math.Between(0, config.width), Phaser.Math.Between(0, config.height), Phaser.Math.FloatBetween(0.5, 1.2));
+                g2.generateTexture('bg2tex', config.width, config.height); g2.destroy(); this.bg2.setTexture('bg2tex');
+                const g3 = this.make.graphics({x:0, y:0}, false);
+                for(let i=0; i<100; i++) g3.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.5, 1.0)).fillCircle(Phaser.Math.Between(0, config.width), Phaser.Math.Between(0, config.height), Phaser.Math.FloatBetween(0.8, 1.8));
+                g3.generateTexture('bg3tex', config.width, config.height); g3.destroy(); this.bg3.setTexture('bg3tex');
+            }
+
+            updateBackground() {
+                const playerVelX = this.player.body.velocity.x;
+                this.bg1.tilePositionX += playerVelX * 0.005;
+                this.bg2.tilePositionX += playerVelX * 0.01;
+                this.bg3.tilePositionX += playerVelX * 0.02;
+            }
+
+            createWorld() {
+                this.platforms = this.physics.add.staticGroup();
+                const TILE_SIZE = 32;
+                const floorY = config.height - TILE_SIZE * 2;
+                const platformPositions = [
+                    // Floor structure
+                    ...Array.from({length: 40}, (_, i) => ({ x: i * TILE_SIZE, y: floorY + TILE_SIZE*2 + Math.sin(i*0.5)*5, w: TILE_SIZE, h: TILE_SIZE })),
+                    ...Array.from({length: 40}, (_, i) => ({ x: i * TILE_SIZE, y: floorY + TILE_SIZE + Math.sin(i*0.5)*5, w: TILE_SIZE, h: TILE_SIZE })),
+                    ...Array.from({length: 15}, (_, i) => ({ x: 430 + i * TILE_SIZE, y: floorY + (i % 3 === 0 ? -TILE_SIZE / 4 : 0), w: TILE_SIZE, h: TILE_SIZE })),
+                    // Floating platforms
+                    { x: 220, y: floorY - 64, w: 160, h: TILE_SIZE },
+                    { x: config.width - 250, y: floorY - 100, w: 192, h: TILE_SIZE },
+                    { x: config.width / 2, y: floorY - 180, w: 128, h: TILE_SIZE},
+                    { x: 100, y: floorY - 250, w: 96, h: TILE_SIZE },
+                    { x: config.width - 150, y: floorY - 350, w: 96, h: TILE_SIZE },
+                ];
+
+                const platGraphics = this.add.graphics();
+                platGraphics.fillStyle(0x1a1a1a);
+                platGraphics.lineStyle(2, 0x506070);
+                platformPositions.forEach(p => {
+                    const plat = this.platforms.create(p.x, p.y).setBodySize(p.w, p.h).setDisplaySize(p.w,p.h).setVisible(false);
+                    platGraphics.fillRect(plat.x-plat.displayWidth/2, plat.y-plat.displayHeight/2, plat.displayWidth, plat.displayHeight);
+                    platGraphics.strokeRect(plat.x-plat.displayWidth/2, plat.y-plat.displayHeight/2, plat.displayWidth, plat.displayHeight);
+                    for(let i = 0; i < p.w/10; i++) {
+                        platGraphics.fillStyle(0x334455, Math.random()*0.5).fillCircle(p.x - p.w/2 + Math.random()*p.w, p.y-p.h/2+Math.random()*p.h, Math.random()*3+1);
+                    }
+                    plat.refreshBody();
+                });
+            }
+            
+            createParticles(x, y, count, color, speed, gravity) {
+                for (let i = 0; i < count; i++) {
+                    const p = this.particles.get();
+                    if (p) p.spawn(x, y, color, speed, gravity);
+                }
+            }
+
+            // --- CORE LOGIC FUNCTIONS ---
+            handlePlayerMovement() {
+                if (this.player.body.touching.down) { playerStats.jumps = playerStats.maxJumps; }
+                if (this.keys.A.isDown) { this.player.setVelocityX(-playerStats.speed); this.player.flipX = true; } 
+                else if (this.keys.D.isDown) { this.player.setVelocityX(playerStats.speed); this.player.flipX = false; }
+                if (Phaser.Input.Keyboard.JustDown(this.keys.W) || Phaser.Input.Keyboard.JustDown(this.keys.SPACE)) {
+                    if (playerStats.jumps > 0) { this.player.setVelocityY(-playerStats.jumpPower); playerStats.jumps--; }
+                }
+            }
+
+            handlePlayerShooting(time) {
+                if (this.isMouseDown && time > this.lastFired + playerStats.fireRate) {
+                    const bullet = this.playerBullets.get();
+                    if (bullet) { 
+                        bullet.fire(this.player, this.mouse); 
+                        this.lastFired = time; 
+                        this.soundManager.playShootSound(); // Play sound
+                    }
+                }
+            }
+            
+            handleEnemySpawning(time) {
+                if (time > this.nextEnemySpawn) {
+                    const spawnCount = 1 + Math.floor(this.gameTime / 45);
+                    for(let i = 0; i < spawnCount; i++) { this.spawnEnemy(); }
+                    const spawnRate = Math.max(400, 3500 - this.gameTime * 25);
+                    this.nextEnemySpawn = time + spawnRate;
+                }
+            }
+
+            // MODIFIED: Spawn enemies from top, left, or right
+            spawnEnemy() {
+                let x, y;
+                const spawnPadding = 50; // Distance off-screen
+                const topSpawnChance = 0.3; // 30% chance to spawn from top
+
+                if (Math.random() < topSpawnChance) {
+                    // Spawn from top
+                    x = Phaser.Math.Between(spawnPadding, config.width - spawnPadding); // Anywhere across the top
+                    y = -spawnPadding; // Just above the top of the screen
+                } else {
+                    // Spawn from left or right
+                    x = Math.random() < 0.5 ? -spawnPadding : config.width + spawnPadding;
+                    // Y can be anywhere within the top half of the screen for horizontal spawns
+                    y = Phaser.Math.Between(50, config.height * 0.5); 
+                }
+
+                const enemy = this.enemies.get(x, y);
+                if(enemy) enemy.initialize(this.gameTime);
+            }
+
+            hitEnemy(bullet, enemy) {
+                let dmg = playerStats.projectileDamage;
+                let isCrit = Math.random() < playerStats.critChance;
+                if (isCrit) dmg *= playerStats.critMultiplier;
+                enemy.takeDamage(dmg, isCrit);
+                this.soundManager.playEnemyHitSound(); // Play sound
+                if (playerStats.lifesteal > 0) {
+                    const healedAmount = Math.min(playerStats.maxHp - playerStats.currentHp, dmg * playerStats.lifesteal);
+                    if (healedAmount > 0) {
+                        playerStats.currentHp += healedAmount;
+                        let healText = this.add.text(this.player.x, this.player.y - 40, `+${Math.ceil(healedAmount)}`, { fontSize: '16px', color: '#2ecc71', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5);
+                        this.tweens.add({ targets: healText, y: this.player.y - 80, alpha: 0, duration: 800, onComplete: () => healText.destroy() });
+                    }
+                }
+                if(playerStats.canApplyWound) enemy.applyWound(playerStats.projectileDamage);
+                bullet.kill();
+            }
+
+            hitPlayer(playerObj, bullet) { this.takePlayerDamage(bullet.damage); bullet.kill(); }
+            touchEnemy(playerObj, enemy) {
+                this.takePlayerDamage(enemy.touchDamage);
+                if (playerStats.bodyDamage > 0) enemy.takeDamage(playerStats.bodyDamage, false);
+            }
+
+            takePlayerDamage(damage) {
+                if (playerStats.isInvulnerable) return;
+                if (playerStats.hasBarrier) {
+                    playerStats.hasBarrier = false; playerStats.lastBarrierTime = this.time.now;
+                    this.tweens.add({ targets: this.barrierIcon, scaleX: 1.5, scaleY: 1.5, alpha: 0, duration: 200 });
+                    return;
+                }
+                const finalDamage = Math.max(1, damage * (1 - playerStats.defense));
+                playerStats.currentHp -= finalDamage;
+                this.cameras.main.shake(100, 0.005); // Screen shake
+                this.soundManager.playPlayerDamageSound(); // Play sound
+                if (playerStats.currentHp <= 0) { this.gameOver(); return; }
+                playerStats.isInvulnerable = true;
+                this.time.delayedCall(500, () => { playerStats.isInvulnerable = false; });
+            }
+            
+            gainExp(amount) {
+                playerStats.exp += amount;
+                if (playerStats.exp >= playerStats.expToNext) {
+                    playerStats.level++;
+                    playerStats.exp -= playerStats.expToNext;
+                    playerStats.expToNext = Math.floor(playerStats.expToNext * 1.4);
+                    playerStats.currentHp = Math.min(playerStats.maxHp, playerStats.currentHp + playerStats.maxHp * 0.25); // Heal 25% on level up
+                    this.showLevelUpDialog();
+                }
+            }
+
+            collectOrb(playerObj, orb) {
+                playerStats.currentHp = Math.min(playerStats.maxHp, playerStats.currentHp + 20);
+                this.soundManager.playCollectOrbSound(); // Play sound
+                orb.kill();
+            }
+            
+            // MODIFIED: Calls showRankingOverlay instead of simple game over text
+            gameOver() {
+                this.gameIsOver = true;
+                this.physics.pause();
+                this.soundManager.playGameOverSound();
+                this.showRankingOverlay();
+            }
+
+            showRankingOverlay() {
+                // Remove any existing overlay first
+                this.removeRankingOverlay();
+
+                const survivalSeconds = this.gameTime;
+                const minutes = Math.floor(survivalSeconds / 60);
+                const seconds = survivalSeconds % 60;
+                const formattedTime = `${minutes}m ${seconds}s`;
+
+                this.rankingOverlay = document.createElement('div');
+                this.rankingOverlay.id = 'ranking-overlay';
+                this.rankingOverlay.innerHTML = `
+                    <h2>G A M E  O V E R</h2>
+                    <p>You reached Level ${playerStats.level}</p>
+                    <p>Survived for ${formattedTime}</p>
+                    
+                    <div id="score-submission">
+                        <label for="playerNameInput">Enter your name for the leaderboard:</label>
+                        <input type="text" id="playerNameInput" placeholder="Your Name" maxlength="20" autofocus>
+                        <button id="submitScoreBtn">Submit Score</button>
+                        <div id="submission-message"></div>
+                    </div>
+
+                    <div id="top10-list">
+                        <h3>TOP 10 MONOCHROME SURVIVORS</h3>
+                        <ul id="leaderboard-ul">
+                            <li>Loading...</li>
+                        </ul>
+                    </div>
+
+                    <button id="restartGameBtn">Restart</button>
+                    <button id="mainMenuFromRankBtn">Main Menu</button>
+                `;
+                document.body.appendChild(this.rankingOverlay);
+
+                // Get references to the new DOM elements
+                const playerNameInput = document.getElementById('playerNameInput');
+                const submitScoreBtn = document.getElementById('submitScoreBtn');
+                const submissionMessage = document.getElementById('submission-message');
+                const leaderboardUl = document.getElementById('leaderboard-ul');
+                const restartGameBtn = document.getElementById('restartGameBtn');
+                const mainMenuFromRankBtn = document.getElementById('mainMenuFromRankBtn');
+
+                // Add event listeners
+                submitScoreBtn.onclick = async () => {
+                    this.soundManager.playUIClickSound();
+                    const name = playerNameInput.value.trim();
+                    if (name.length > 0) {
+                        submitScoreBtn.disabled = true; // Prevent double submission
+                        await this.submitScore(name, survivalSeconds, submissionMessage);
+                        submitScoreBtn.disabled = false;
+                        playerNameInput.value = ''; // Clear input after submission
+                        playerNameInput.style.display = 'none'; // Hide input
+                        submitScoreBtn.style.display = 'none'; // Hide button
+                    } else {
+                        submissionMessage.textContent = "Please enter a name.";
+                        submissionMessage.className = "error";
+                    }
+                };
+
+                restartGameBtn.onclick = () => {
+                    this.soundManager.playUIClickSound();
+                    this.removeRankingOverlay();
+                    this.scene.restart();
+                };
+
+                mainMenuFromRankBtn.onclick = () => {
+                    this.soundManager.playUIClickSound();
+                    this.removeRankingOverlay();
+                    this.scene.start('MainMenuScene');
+                };
+
+                // Fetch and display top 10 immediately
+                this.fetchTop10AndDisplay(leaderboardUl);
+            }
+
+            removeRankingOverlay() {
+                if (this.rankingOverlay && this.rankingOverlay.parentNode) {
+                    this.rankingOverlay.parentNode.removeChild(this.rankingOverlay);
+                    this.rankingOverlay = null;
+                }
+            }
+
+            async submitScore(name, survivalSeconds, messageElement) {
+                messageElement.textContent = 'Submitting score...';
+                messageElement.className = ''; // Clear error class
+
+                const totalHours = parseFloat((survivalSeconds / 3600).toFixed(2)); // Convert seconds to hours, 2 decimal places
+
+                try {
+                    const response = await fetch(API_ENDPOINTS.ADD_PLAYER, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ name: name, total_hours: totalHours }),
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        messageElement.textContent = data.message || "Score submitted successfully!";
+                        messageElement.className = "success";
+                        this.fetchTop10AndDisplay(document.getElementById('leaderboard-ul')); // Refresh top 10
+                    } else {
+                        const errorData = await response.json();
+                        messageElement.textContent = errorData.error || "Failed to submit score.";
+                        messageElement.className = "error";
+                    }
+                } catch (error) {
+                    console.error('Network or API error:', error);
+                    messageElement.textContent = "Network error. Could not connect to ranking server.";
+                    messageElement.className = "error";
+                }
+            }
+
+            async fetchTop10AndDisplay(listElement) {
+                listElement.innerHTML = '<li>Loading...</li>'; // Show loading state
+
+                try {
+                    const response = await fetch(API_ENDPOINTS.GET_TOP10);
+                    if (response.ok) {
+                        const topPlayers = await response.json();
+                        if (topPlayers.length === 0) {
+                            listElement.innerHTML = '<li>No scores yet. Be the first!</li>';
+                        } else {
+                            listElement.innerHTML = topPlayers.map((player, index) => {
+                                return `<li>
+                                            <span>${index + 1}. ${player.name}</span>
+                                            <span>${player.total_hours.toFixed(2)} hrs</span>
+                                        </li>`;
+                            }).join('');
+                        }
+                    } else {
+                        listElement.innerHTML = '<li>Failed to load top scores.</li>';
+                        console.error('Failed to fetch top 10:', response.status);
+                    }
+                } catch (error) {
+                    listElement.innerHTML = '<li>Network error loading scores.</li>';
+                    console.error('Network error fetching top 10:', error);
+                }
+            }
+
+            showLevelUpDialog() {
+                this.gameIsPaused = true;
+                this.physics.pause();
+                this.soundManager.playLevelUpSound(); // Play sound
+                const weightedUpgrades = [];
+                UPGRADES.forEach(u => {
+                    const weight = { common: 4, uncommon: 2, rare: 1 }[u.rarity];
+                    for (let i = 0; i < weight; i++) weightedUpgrades.push(u);
+                });
+                
+                let choices = [];
+                let available = [...weightedUpgrades];
+                while (choices.length < playerStats.upgradeChoices && available.length > 0) {
+                    let randIndex = Phaser.Math.Between(0, available.length - 1);
+                    let newChoice = available[randIndex];
+                    if (!choices.some(c => c.id === newChoice.id)) {
+                        choices.push(newChoice);
+                    }
+                    if (choices.length >= UPGRADES.length) break;
+                }
+
+                const dialogWidth = 800, cardHeight = 120, cardGap = 20;
+                const dialogHeight = 100 + choices.length * (cardHeight + cardGap);
+                const container = this.add.container(config.width/2, config.height/2).setDepth(100);
+                const overlay = this.add.graphics().fillStyle(0x000000, 0.8).fillRect(0, 0, config.width, config.height).setDepth(99);
+                container.add(overlay); container.x = 0; container.y = 0;
+
+                const title = this.add.text(config.width/2, config.height/2 - dialogHeight/2 + 50, 'LEVEL UP! CHOOSE AN UPGRADE', { fontSize: '28px', color: '#ffff00', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5);
+                container.add(title);
+                
+                choices.forEach((upgrade, i) => {
+                    const cardY = config.height/2 - dialogHeight/2 + 130 + (i * (cardHeight + cardGap));
+                    const cardX = config.width/2;
+                    const card = this.add.container(cardX, cardY);
+                    container.add(card);
+                    const bg = this.add.graphics();
+                    card.add(bg);
+                    const currentLevel = playerStats.ownedUpgrades[upgrade.id] || 0;
+                    const drawButton = (isHover) => {
+                        bg.clear();
+                        bg.fillStyle(isHover ? 0x282828 : 0x111111, 0.95).fillRoundedRect(-350, -cardHeight/2, 700, cardHeight, 10);
+                        bg.lineStyle(3, Phaser.Display.Color.HexStringToColor(upgrade.color).color, isHover ? 1.0 : 0.6).strokeRoundedRect(-350, -cardHeight/2, 700, cardHeight, 10);
+                    };
+                    drawButton(false);
+                    const nameText = this.add.text(-330, -cardHeight/2 + 15, upgrade.name, { fontSize: '24px', color: upgrade.color, fontStyle: 'bold' });
+                    const descText = this.add.text(-330, -cardHeight/2 + 50, upgrade.desc, { fontSize: '18px', color: '#cccccc', wordWrap: { width: 450 } });
+                    const rarityText = this.add.text(330, -cardHeight/2 + 15, upgrade.rarity.toUpperCase(), { fontSize: '16px', color: upgrade.color, fontStyle: 'italic' }).setOrigin(1, 0);
+                    const levelText = this.add.text(330, cardHeight/2 - 15, `LV. ${currentLevel}`, { fontSize: '20px', color: '#ffff00', fontStyle: 'bold' }).setOrigin(1, 1);
+                    card.add([nameText, descText, rarityText, levelText]);
+                    const hitArea = this.add.zone(0, 0, 700, cardHeight).setInteractive({ cursor: 'pointer' });
+                    card.add(hitArea);
+                    hitArea.on('pointerdown', () => {
+                        this.soundManager.playUIClickSound(); // Play sound
+                        upgrade.apply(playerStats, this);
+                        playerStats.ownedUpgrades[upgrade.id] = currentLevel + 1;
+                        this.updateOwnedUpgradesUI();
+                        this.gameIsPaused = false;
+                        this.physics.resume();
+                        container.destroy();
+                        overlay.destroy();
+                    });
+                    hitArea.on('pointerover', () => drawButton(true));
+                    hitArea.on('pointerout', () => drawButton(false));
+                });
+            }
+            
+            // --- DRAWING & UI ---
+            drawPlayer(time) {
+                const g = this.player.graphics;
+                g.clear().lineStyle(2, 0xffffff, playerStats.isInvulnerable ? (Math.sin(this.time.now / 50) * 0.4 + 0.6) : 1.0).setDepth(1);
+                const x = this.player.body.center.x; const y = this.player.body.y;
+                g.beginPath().moveTo(x - 12, y + 48).lineTo(x, y + 10).lineTo(x + 12, y + 48).closePath().strokePath();
+                g.strokeCircle(x, y + 6, 6);
+                const staffX = this.player.flipX ? x - 10 : x + 10;
+                g.lineBetween(staffX, y, staffX, y + 48);
+                g.strokeCircle(staffX, y, 3);
+                let lead = { x: x + (this.player.flipX ? 5 : -5) , y: y + 20 };
+                this.player.scarf.forEach((p, i) => {
+                    p.x += (lead.x - p.x) * 0.5; p.y += (lead.y - p.y) * 0.5;
+                    g.lineStyle(2 - i * 0.4, 0xff00ff).lineBetween(lead.x, lead.y, p.x, p.y);
+                    lead = p;
+                });
+            }
+
+            createUI() {
+                const uiContainer = this.add.container(20, 20).setDepth(50);
+                uiContainer.add(this.add.graphics().fillStyle(0x000000, 0.5).fillRect(0, 0, 304, 52));
+                this.hpBar = this.add.graphics();
+                this.hpText = this.add.text(152, 14, '', { fontSize: '16px' }).setOrigin(0.5);
+                this.expBar = this.add.graphics();
+                this.expText = this.add.text(152, 42, '', { fontSize: '12px' }).setOrigin(0.5);
+                this.levelText = this.add.text(330, 5, '', { fontSize: '24px', color: '#ffff00' });
+                this.timeText = this.add.text(config.width - 20, 20, '', { fontSize: '20px' }).setOrigin(1, 0);
+                this.barrierIcon = this.add.image(330, 45, null).setVisible(false).setAlpha(0.8);
+                this.barrierIcon.graphics = this.add.graphics();
+                this.ownedUpgradesContainer = this.add.container(20, 80).setDepth(50);
+                uiContainer.add([this.hpBar, this.expBar, this.hpText, this.expText, this.levelText, this.timeText, this.barrierIcon, this.barrierIcon.graphics, this.ownedUpgradesContainer]);
+            }
+
+            updateUI(time) {
+                this.hpBar.clear().fillStyle(0x2ecc71).fillRect(2, 2, 300 * Math.max(0, playerStats.currentHp / playerStats.maxHp), 24);
+                this.hpText.setText(`${Math.ceil(playerStats.currentHp)} / ${playerStats.maxHp}`);
+                this.expBar.clear().fillStyle(0x3498db).fillRect(2, 34, 300 * Math.max(0, playerStats.exp / playerStats.expToNext), 16);
+                this.expText.setText(`EXP: ${playerStats.exp} / ${playerStats.expToNext}`);
+                this.levelText.setText(`LV.${playerStats.level}`);
+                this.timeText.setText(`${Math.floor(this.gameTime/60)}:${(this.gameTime%60).toString().padStart(2, '0')}`);
+            }
+
+            updateOwnedUpgradesUI() {
+                this.ownedUpgradesContainer.removeAll(true);
+                let iconX = 0;
+                const iconSize = 32; const iconGap = 8;
+                for (const [id, level] of Object.entries(playerStats.ownedUpgrades)) {
+                    if (level > 0) {
+                        const upgrade = UPGRADES.find(u => u.id === id);
+                        if (!upgrade) continue;
+                        const iconBg = this.add.graphics().fillStyle(0x000000, 0.6).fillRoundedRect(iconX, 0, iconSize, iconSize, 5);
+                        const iconBorder = this.add.graphics().lineStyle(2, Phaser.Display.Color.HexStringToColor(upgrade.color).color).strokeRoundedRect(iconX, 0, iconSize, iconSize, 5);
+                        const iconText = this.add.text(iconX + iconSize/2, iconSize/2, upgrade.name.substring(0,2).toUpperCase(), { fontSize: '14px', color: upgrade.color, fontStyle: 'bold' }).setOrigin(0.5);
+                        const levelText = this.add.text(iconX + iconSize - 2, iconSize - 2, level, { fontSize: '12px', color: '#ffff00', stroke: '#000000', strokeThickness: 3 }).setOrigin(1,1);
+                        this.ownedUpgradesContainer.add([iconBg, iconBorder, iconText, levelText]);
+                        iconX += iconSize + iconGap;
+                    }
+                }
+            }
+            
+            updateBarrier(time) {
+                if (!this.barrierIcon.visible) return;
+                this.barrierIcon.graphics.clear();
+                const g = this.barrierIcon.graphics;
+                if (playerStats.hasBarrier) {
+                    g.lineStyle(2, 0x33ccff).strokeCircle(0, 0, 10).setAlpha(0.5 + Math.sin(time / 200) * 0.5);
+                } else {
+                    const progress = Math.min(1, (time - playerStats.lastBarrierTime) / playerStats.barrierCooldown);
+                    g.lineStyle(4, 0x33ccff, 0.3).slice(0, 0, 10, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(270), true).strokePath();
+                    if (progress < 1) { g.lineStyle(4, 0x33ccff, 1).slice(0, 0, 10, Phaser.Math.DegToRad(-90), Phaser.Math.DegToRad(-90 + 360 * progress), false).strokePath(); }
+                    if (progress >= 1) { playerStats.hasBarrier = true; this.tweens.add({ targets: this.barrierIcon, scaleX: [1.5,1], scaleY: [1.5,1], alpha: [0.5, 0.8], duration: 300 }); }
+                }
+            }
+            
+            enableBarrier() {
+                if (this.barrierIcon.visible) return;
+                playerStats.hasBarrier = true;
+                this.barrierIcon.setVisible(true).setScale(1).setAlpha(0.8);
+            }
+        }
+
+        // --- GAME OBJECT CLASSES ---
+        class PlayerBullet extends Phaser.Physics.Arcade.Sprite {
+            fire(player, target) {
+                this.setActive(true).setVisible(true);
+                this.graphics = this.scene.add.graphics({ fillStyle: { color: 0xffff00 } });
+                this.body.reset(player.body.center.x, player.body.y + 20);
+                this.body.setAllowGravity(false);
+                this.body.setCircle(4);
+                this.scene.physics.moveTo(this, target.x, target.y, 1000);
+            }
+            update(time, delta) {
+                if (this.x < -10 || this.x > config.width + 10 || this.y < -10 || this.y > config.height + 10) this.kill();
+                if (this.active) {
+                    this.graphics.clear().fillStyle(0xffffff).fillCircle(this.x, this.y, 4);
+                    this.graphics.lineStyle(2, 0xffff00, 0.5).lineBetween(this.x, this.y, this.x - this.body.velocity.x * 0.05, this.y - this.body.velocity.y * 0.05);
+                }
+            }
+            kill() { 
+                if (!this.scene) return;
+                this.scene.createParticles(this.x, this.y, 3, 0xcccccc, 100, false);
+                if (this.graphics) this.graphics.destroy(); 
+                this.setActive(false).setVisible(false).body.stop(); 
+            }
+        }
+
+        class Enemy extends Phaser.Physics.Arcade.Sprite {
+            initialize(gameTime) {
+                const ENEMY_TARGET_Y = config.height * 0.7; // Target Y for enemies to settle in the play area
+                this.ENEMY_TARGET_Y = ENEMY_TARGET_Y;
+                this.setActive(true).setVisible(true).setBodySize(32, 32);
+                this.body.setAllowGravity(false).setCollideWorldBounds(true).setBounce(1);
+
+                const difficulty = 1 + gameTime / 60;
+                this.hp = this.maxHp = Math.floor(20 * difficulty);
+                this.touchDamage = Math.floor(10 * difficulty);
+                this.bulletDamage = Math.floor(5 * difficulty);
+                this.speed = Phaser.Math.Between(80, 120) * (1 + gameTime / 120);
+                this.expValue = Math.floor(15 * difficulty);
+                this.shootCooldown = Math.max(800, 3000 - gameTime * 10);
+                this.lastShot = 0; this.woundTicks = 0; this.woundDamage = 0; this.lastWoundTime = 0;
+                this.graphics = this.scene.add.graphics();
+                this.body.onWorldBounds = true;
+
+                // Determine initial behavior based on spawn location
+                if (this.y < 0) { // Spawned from top
+                    this.state = 'DROPPING';
+                    this.body.setVelocityY(this.speed * 0.5); // Move down
+                } else if (this.x < 0 || this.x > config.width) { // Spawned from left or right
+                    this.state = 'ENTERING_HORIZONTAL';
+                    this.body.setVelocityX(this.x < config.width / 2 ? this.speed : -this.speed); // Move towards center
+                    this.body.setVelocityY(Phaser.Math.Between(-50, 50)); // Slight vertical drift
+                } else {
+                    // Default to attacking if somehow spawned in the middle of the screen
+                    this.state = 'ATTACKING';
+                }
+                this.scene.soundManager.playEnemySpawnSound();
+            }
+            takeDamage(damage, isCrit) {
+                this.hp -= damage;
+                let text = this.scene.add.text(this.x, this.y, Math.round(damage), { fontSize: isCrit ? '20px' : '14px', color: isCrit ? '#ffff00' : '#ffffff', stroke: '#000000', strokeThickness: 4 }).setOrigin(0.5);
+                this.scene.tweens.add({ targets: text, y: this.y - 40, alpha: 0, duration: 700, onComplete: () => text.destroy() });
+                if (this.hp <= 0) {
+                    this.scene.gainExp(this.expValue);
+                    if (Math.random() < playerStats.healOrbChance) this.scene.orbs.get(this.x, this.y)?.launch();
+                    this.kill();
+                }
+            }
+            applyWound(damage) { this.woundTicks = 3; this.woundDamage = damage * 0.5; this.lastWoundTime = this.scene.time.now; }
+            update(time, delta) {
+                if (!this.active) return;
+
+                if (this.state === 'DROPPING') {
+                    // Stop dropping when it reaches the general play area or player's Y
+                    if (this.y >= this.ENEMY_TARGET_Y - 100) {
+                        this.state = 'ATTACKING';
+                        this.body.setVelocityY(0); 
+                    }
+                } else if (this.state === 'ENTERING_HORIZONTAL') {
+                    // Stop horizontal movement when it's well within the screen
+                    let targetXReached = false;
+                    const stopXMargin = config.width * 0.2; // Stop when 20% in from either side
+
+                    if (this.x < config.width / 2 && this.body.velocity.x > 0 && this.x > stopXMargin) { // Coming from left
+                        targetXReached = true;
+                    } else if (this.x > config.width / 2 && this.body.velocity.x < 0 && this.x < config.width - stopXMargin) { // Coming from right
+                        targetXReached = true;
+                    }
+                    
+                    if (targetXReached && this.y < config.height * 0.8) { // Also ensure it's not trying to enter below the floor
+                        this.state = 'ATTACKING';
+                        this.body.setVelocityX(0); // Stop horizontal entry
+                        this.body.setVelocityY(0); // Stop any slight vertical drift
+                    }
+                } else if (this.state === 'ATTACKING') {
+                    // Normal attacking behavior, move towards player
+                    let targetY = Math.min(this.scene.player.y, this.ENEMY_TARGET_Y);
+                    // Add a slight random offset to targetX to make movement less predictable
+                    let targetX = this.scene.player.x + Phaser.Math.Between(-50, 50);
+                    this.scene.physics.moveTo(this, targetX, targetY, this.speed);
+
+                    if (time > this.lastShot + this.shootCooldown) {
+                        this.scene.enemyBullets.get()?.fire(this, this.scene.player, this.bulletDamage);
+                        this.lastShot = time;
+                    }
+                }
+
+                if(this.woundTicks > 0 && time > this.lastWoundTime + 1000) { this.takeDamage(this.woundDamage, false); this.woundTicks--; this.lastWoundTime = time; }
+                this.draw(time);
+            }
+            draw(time) {
+                const g = this.graphics.clear().lineStyle(2, this.woundTicks > 0 ? 0xff0000 : 0xff00ff);
+                const spikes = 7; const angleStep = (Math.PI * 2) / spikes;
+                const pulse = 1 + Math.sin(time/200)*0.1;
+                g.beginPath().moveTo(this.x + 16 * pulse, this.y);
+                for (let i = 1; i <= spikes; i++) {
+                    const radius = ((i % 2 === 0) ? 12 : 16) * pulse;
+                    g.lineTo(this.x + Math.cos(angleStep * i) * radius, this.y + Math.sin(angleStep * i) * radius);
+                }
+                g.closePath().strokePath();
+            }
+            kill() { 
+                if (!this.scene) return;
+                this.scene.createParticles(this.x, this.y, 15, 0xff00ff, 200, false);
+                if (this.graphics) this.graphics.destroy(); 
+                this.setActive(false).setVisible(false);
+                if (this.body) { // Ensure body exists before trying to stop it
+                    this.body.stop();
+                    this.body.enable = false; // Explicitly disable it for better pooling
+                }
+            }
+        }
+        
+        class EnemyBullet extends Phaser.Physics.Arcade.Sprite {
+             fire(source, target, damage) {
+                this.damage = damage;
+                this.setActive(true).setVisible(true);
+                this.graphics = this.scene.add.graphics({ lineStyle: { width: 2, color: 0xff00ff } });
+                this.body.reset(source.x, source.y);
+                this.body.setAllowGravity(false);
+                this.body.setCircle(6);
+                this.scene.physics.moveTo(this, target.x, target.y, 450);
+             }
+             update() {
+                if (this.x < -10 || this.x > config.width + 10 || this.y < -10 || this.y > config.height + 10) this.kill();
+                if (this.active) this.graphics.clear().lineStyle(2,0xff00ff).strokeCircle(this.x, this.y, 4);
+             }
+             kill() { 
+                 if(!this.scene) return; 
+                 this.scene.createParticles(this.x, this.y, 5, 0xff00ff, 50, false);
+                 if (this.graphics) this.graphics.destroy(); 
+                 this.setActive(false).setVisible(false).body.stop(); 
+            }
+        }
+
+        class HealingOrb extends Phaser.Physics.Arcade.Sprite {
+            launch() {
+                this.setActive(true).setVisible(true);
+                
+                // IMPORTANT FIX: Ensure body is enabled before attempting to use it
+                if (!this.body) {
+                    console.error("HealingOrb launched without a physics body! Destroying.", this);
+                    this.destroy(); // Destroy this instance if it's broken
+                    return;
+                }
+                this.body.enable = true; // Re-enable the physics body
+                this.body.reset(this.x, this.y); // Reset position and velocity
+                this.body.setAllowGravity(true); // Apply gravity
+                this.body.setCircle(8); // Re-set the shape (just in case reset cleared it)
+                this.body.setVelocity(Phaser.Math.Between(-100, 100), -300).setBounce(0.8).setDragX(50);
+                
+                this.graphics = this.scene.add.graphics();
+                this.scene.time.delayedCall(8000, () => this.kill());
+            }
+            update(time) {
+                // Check if active and body is enabled before drawing
+                if (this.active && this.body && this.body.enable && this.graphics) {
+                    this.graphics.clear().lineStyle(2, 0x00ff00).setAlpha(0.6 + Math.sin(time / 150) * 0.4).strokeCircle(this.x, this.y, 6);
+                }
+            }
+            kill() { 
+                if(!this.scene) return; 
+                if (this.graphics) {
+                    this.graphics.destroy(); 
+                    this.graphics = null; // Clear reference to destroyed graphics
+                }
+                this.setActive(false).setVisible(false);
+                if (this.body) { // Ensure body exists before trying to stop/disable it
+                    this.body.stop(); // Stops velocity, sets body.active = false
+                    this.body.enable = false; // Explicitly ensures body is disabled for physics updates
+                }
+            }
+        }
+
+        class Particle extends Phaser.Physics.Arcade.Sprite {
+            spawn(x, y, color, speed, gravity) {
+                this.setActive(true).setVisible(true);
+                this.body.reset(x, y);
+                this.body.setAllowGravity(gravity);
+                this.lifespan = 500;
+                this.graphics = this.scene.add.graphics().fillStyle(color);
+                const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+                const velocity = Phaser.Math.FloatBetween(0, speed);
+                this.body.setVelocity(Math.cos(angle) * velocity, Math.sin(angle) * velocity);
+            }
+            update(time, delta) {
+                if (!this.active) return;
+                this.lifespan -= delta;
+                const progress = Math.max(0, this.lifespan / 500);
+                this.graphics.clear().setAlpha(progress).fillCircle(this.x, this.y, 2 * progress);
+                if (this.lifespan <= 0) this.kill();
+            }
+            kill() { 
+                if (this.graphics) this.graphics.destroy(); 
+                this.setActive(false).setVisible(false); 
+            }
+        }
+
+        // --- GAME CONFIGURATION ---
+        const config = {
+            type: Phaser.AUTO,
+            width: 1280,
+            height: 720,
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 2200 },
+                    debug: false
+                }
+            },
+            scene: [MainMenuScene, GameScene]
+        };
+
+        // --- START GAME ---
+        const game = new Phaser.Game(config);
+    </script>
+</body>
+</html>
